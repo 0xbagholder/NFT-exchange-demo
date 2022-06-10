@@ -10,6 +10,8 @@ error NftExchange__AlreadyListed(address nftAddr, uint256 tokenId);
 error NftExchange__NotListed(address nftAddr, uint256 tokenId);
 error NftExchange__NotOwner();
 error NftExchange__PriceNotMet(address nftAddr, uint256 tokenId, uint256 price);
+error NftExchange__NoProceeds();
+error NftExchange__WithdrawFailed();
 
 contract NftExchange is ReentrancyGuard {
 	struct Listing {
@@ -65,8 +67,6 @@ contract NftExchange is ReentrancyGuard {
 		_;
 	}
 
-	constructor() {}
-
 	/**
 	 * @notice Function for listing an NFT on the exchange
 	 * @param _nftAddr: Address of the NFT
@@ -112,5 +112,31 @@ contract NftExchange is ReentrancyGuard {
 	{
 		delete s_listings[_nftAddr][_tokenId];
 		emit ListingCancelled(msg.sender, _nftAddr, _tokenId);
+	}
+
+	function updateListing(
+		address _nftAddr,
+		uint256 _tokenId,
+		uint256 _newPrice
+	) external isListed(_nftAddr, _tokenId) isOwner(_nftAddr, _tokenId, msg.sender) {
+		s_listings[_nftAddr][_tokenId].price = _newPrice;
+		emit ItemListed(msg.sender, _nftAddr, _tokenId, _newPrice);
+	}
+
+	function withdrawProceeds() external {
+		uint256 proceeds = s_proceeds[msg.sender];
+		if (proceeds <= 0) revert NftExchange__NoProceeds();
+
+		s_proceeds[msg.sender] = 0;
+		(bool success, ) = payable(msg.sender).call{value: proceeds}("");
+		if (!success) revert NftExchange__WithdrawFailed();
+	}
+
+	function getListing(address _nftAddr, uint256 _tokenId) external view returns (Listing memory) {
+		return s_listings[_nftAddr][_tokenId];
+	}
+
+	function getProceeds(address _seller) external view returns (uint256) {
+		return s_proceeds[_seller];
 	}
 }
